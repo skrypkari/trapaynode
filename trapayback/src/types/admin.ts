@@ -87,3 +87,66 @@ export interface PayoutFilters {
   dateTo?: string;
   search?: string;
 }
+
+// ✅ ДОБАВЛЕНО: Новые интерфейсы для статистики мерчантов
+export interface MerchantStatisticsFilters {
+  shopId?: string;        // Фильтр по конкретному мерчанту
+  period?: 'all' | 'year' | 'month' | 'week' | 'custom'; // Предустановленные периоды
+  dateFrom?: string;      // Кастомный период - начало
+  dateTo?: string;        // Кастомный период - конец
+}
+
+export interface MerchantStatistics {
+  // Основные метрики
+  totalTurnover: number;        // Всего оборот в USDT (сумма всех PAID платежей)
+  merchantEarnings: number;     // Заработано мерчантов в USDT (оборот - комиссия шлюза)
+  gatewayEarnings: number;      // Заработано шлюзом в USDT (комиссия)
+  totalPaidOut: number;         // Выплачено в USDT (сумма всех выплат)
+  averageCheck: number;         // Средний чек в USDT
+  
+  // Дополнительная информация
+  totalPayments: number;        // Общее количество платежей
+  successfulPayments: number;   // Количество успешных платежей
+  conversionRate: number;       // Конверсия (% успешных платежей)
+  
+  // Разбивка по шлюзам
+  gatewayBreakdown: Array<{
+    gateway: string;
+    gatewayDisplayName: string;
+    paymentsCount: number;
+    turnoverUSDT: number;
+    commissionUSDT: number;
+    merchantEarningsUSDT: number;
+    averageCommissionRate: number; // Средняя комиссия в %
+  }>;
+  
+  // Разбивка по мерчантам (если не выбран конкретный мерчант)
+  merchantBreakdown?: Array<{
+    shopId: string;
+    shopName: string;
+    shopUsername: string;
+    paymentsCount: number;
+    turnoverUSDT: number;
+    commissionUSDT: number;
+    merchantEarningsUSDT: number;
+    paidOutUSDT: number;
+    averageCheckUSDT: number;
+  }>;
+  
+  // Временные данные для графиков
+  dailyData: Array<{
+    date: string;
+    turnover: number;
+    merchantEarnings: number;
+    gatewayEarnings: number;
+    paymentsCount: number;
+  }>;
+  
+  // Период анализа
+  periodInfo: {
+    from: Date;
+    to: Date;
+    periodType: string;
+    daysCount: number;
+  };
+}

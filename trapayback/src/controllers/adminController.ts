@@ -3,7 +3,7 @@ import { AdminService } from '../services/adminService';
 import { PaymentLinkService } from '../services/paymentLinkService'; // ✅ ДОБАВЛЕНО
 import { telegramBotService } from '../services/telegramBotService';
 import { UpdateUserRequest } from '../types/user';
-import { MerchantsAwaitingPayoutFilters, CreatePayoutRequest, PayoutFilters } from '../types/admin';
+import { MerchantsAwaitingPayoutFilters, CreatePayoutRequest, PayoutFilters, MerchantStatisticsFilters } from '../types/admin';
 
 export class AdminController {
   private adminService: AdminService;
@@ -40,6 +40,36 @@ export class AdminController {
     try {
       const { period = '30d' } = req.query;
       const statistics = await this.adminService.getSystemStatistics(period as string);
+      
+      res.json({
+        success: true,
+        result: statistics,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ✅ ДОБАВЛЕНО: GET /api/admin/merchant-statistics - Get merchant statistics with filters
+  getMerchantStatistics = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { 
+        shopId,
+        period = 'month',
+        dateFrom,
+        dateTo
+      } = req.query;
+
+      const filters: MerchantStatisticsFilters = {
+        shopId: shopId as string,
+        period: period as 'all' | 'year' | 'month' | 'week' | 'custom',
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+      };
+
+      console.log('📊 Admin requesting merchant statistics with filters:', filters);
+
+      const statistics = await this.adminService.getMerchantStatistics(filters);
       
       res.json({
         success: true,
@@ -320,7 +350,6 @@ export class AdminController {
             await telegramBotService.sendPaymentNotification(
               paymentBefore.shopId, 
               paymentForNotification, 
-              //@ts-ignore
               telegramStatus
             );
 
