@@ -1,0 +1,239 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum ShopStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PaymentUsage {
+  ONCE
+  REUSABLE
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING  // ✅ ДОБАВЛЕНО: Новый статус для обработки платежей
+  PAID
+  EXPIRED
+  FAILED
+  REFUND
+  CHARGEBACK
+}
+
+enum PayoutStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}
+
+enum PaymentLinkStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  COMPLETED
+}
+
+model Shop {
+  id              String     @id @default(cuid())
+  name            String
+  username        String     @unique
+  telegram        String?    @unique
+  password        String
+  publicKey       String     @unique @map("public_key")
+  secretKey       String     @unique @map("secret_key")
+  shopUrl         String     @map("shop_url")
+  paymentGateways String?    @map("payment_gateways") @db.Text
+  gatewaySettings String?    @map("gateway_settings") @db.Text // Gateway-specific settings
+  // Wallet fields
+  usdtPolygonWallet String?  @map("usdt_polygon_wallet")
+  usdtTrcWallet     String?  @map("usdt_trc_wallet")
+  usdtErcWallet     String?  @map("usdt_erc_wallet")
+  usdcPolygonWallet String?  @map("usdc_polygon_wallet")
+  status          ShopStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  payments    Payment[]
+  webhookLogs WebhookLog[]
+  payouts     Payout[]
+  settings    ShopSettings?
+  telegramUsers TelegramUser[]
+  paymentLinks PaymentLink[]
+
+  @@map("shops")
+}
+
+model PaymentLink {
+  id              String            @id @default(cuid())
+  shopId          String            @map("shop_id")
+  amount          Float             // ✅ ВСЕГДА обязательный
+  currency        String            @default("USD")
+  sourceCurrency  String?           @map("source_currency") // For Plisio (crypto currency)
+  gateway         String            // Gateway name (plisio, rapyd, noda)
+  maxPayments     Int               @default(1) @map("max_payments")
+  currentPayments Int               @default(0) @map("current_payments")
+  status          PaymentLinkStatus @default(ACTIVE)
+  expiresAt       DateTime?         @map("expires_at")
+  successUrl      String?           @map("success_url") @db.Text
+  failUrl         String?           @map("fail_url") @db.Text
+  // Rapyd specific fields
+  country         String?
+  language        String?           @default("EN")
+  
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@map("payment_links")
+}
+
+model ShopSettings {
+  id                    String  @id @default(cuid())
+  shopId                String  @unique @map("shop_id")
+  telegramBotApiKey     String? @map("telegram_bot_api_key") @db.Text
+  telegramChatId        String? @map("telegram_chat_id")
+  notificationPaymentSuccess Boolean @default(true) @map("notification_payment_success")
+  notificationPaymentFailed  Boolean @default(true) @map("notification_payment_failed")
+  notificationRefund         Boolean @default(false) @map("notification_refund")
+  notificationPayout         Boolean @default(true) @map("notification_payout")
+  notificationLogin          Boolean @default(true) @map("notification_login")
+  notificationApiError       Boolean @default(true) @map("notification_api_error")
+  webhookUrl            String? @map("webhook_url") @db.Text
+  webhookEvents         Json?   @map("webhook_events") // ✅ ИЗМЕНЕНО: String[] -> Json для MySQL
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("shop_settings")
+}
+
+model TelegramUser {
+  id          String   @id @default(cuid())
+  telegramId  String   @unique @map("telegram_id")
+  username    String?  @map("telegram_username")
+  firstName   String?  @map("first_name")
+  lastName    String?  @map("last_name")
+  shopId      String?  @map("shop_id")
+  isVerified  Boolean  @default(false) @map("is_verified")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@map("telegram_users")
+}
+
+model Payment {
+  id                  String        @id @default(cuid())
+  shopId              String        @map("shop_id")
+  paymentLinkId       String?       @map("payment_link_id") // New field for linking to payment link
+  gateway             String
+  amount              Float
+  currency            String        @default("USD")
+  sourceCurrency      String?       @map("source_currency") // New field
+  usage               PaymentUsage  @default(ONCE)
+  expiresAt           DateTime?     @map("expires_at")
+  successUrl          String        @map("success_url") @db.Text
+  failUrl             String        @map("fail_url") @db.Text
+  status              PaymentStatus @default(PENDING)
+  externalPaymentUrl  String?       @map("external_payment_url") @db.Text
+  gatewayPaymentId    String?       @map("gateway_payment_id")
+  orderId             String?       @map("order_id") // Merchant's order ID (can be null)
+  gatewayOrderId      String?       @map("gateway_order_id") // Gateway order ID (always generated, 8digits-8digits)
+  customerEmail       String?       @map("customer_email")
+  customerName        String?       @map("customer_name")
+  // New Plisio fields
+  invoiceTotalSum     Float?        @map("invoice_total_sum")
+  qrCode              String?       @map("qr_code") @db.Text
+  qrUrl               String?       @map("qr_url") @db.Text
+  // New Rapyd fields
+  country             String?       @map("country")
+  language            String?       @map("language")
+  amountIsEditable    Boolean?      @map("amount_is_editable")
+  maxPayments         Int?          @map("max_payments")
+  rapydCustomer       String?       @map("rapyd_customer")
+  // New payment details fields
+  cardLast4           String?       @map("card_last4") // Last 4 digits of card (Rapyd)
+  paymentMethod       String?       @map("payment_method") // Payment method type
+  bankId              String?       @map("bank_id") // Bank ID (Noda)
+  remitterIban        String?       @map("remitter_iban") // Remitter IBAN (Noda)
+  remitterName        String?       @map("remitter_name") // Remitter name (Noda)
+  // New fields for payout tracking
+  paidAt              DateTime?     @map("paid_at") // When payment was actually paid
+  merchantPaid        Boolean       @default(false) @map("merchant_paid") // Whether merchant has been paid out
+  // ✅ ДОБАВЛЕНО: Поля для chargeback и refund
+  chargebackAmount    Float?        @map("chargeback_amount") // Сумма штрафа при chargeback
+  adminNotes          String?       @map("admin_notes") @db.Text // Заметки админа при изменении статуса
+  statusChangedBy     String?       @map("status_changed_by") // Кто изменил статус (admin/system)
+  statusChangedAt     DateTime?     @map("status_changed_at") // Когда изменен статус
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  shop        Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  paymentLink PaymentLink? @relation(fields: [paymentLinkId], references: [id], onDelete: SetNull)
+  webhookLogs WebhookLog[]
+
+  @@map("payments")
+}
+
+model Payout {
+  id        String       @id @default(cuid())
+  shopId    String       @map("shop_id")
+  amount    Float
+  network   String       // Network type (e.g., "polygon", "trc20", "erc20")
+  status    PayoutStatus @default(COMPLETED) // Always COMPLETED for admin-created payouts
+  txid      String?
+  notes     String?      @db.Text // Optional notes from admin
+  createdAt DateTime     @default(now()) @map("created_at")
+  paidAt    DateTime     @default(now()) @map("paid_at") // Set to creation time for admin payouts
+
+  // Relations
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("payouts")
+}
+
+model WebhookLog {
+  id           String   @id @default(cuid())
+  paymentId    String   @map("payment_id")
+  shopId       String   @map("shop_id")
+  event        String
+  statusCode   Int      @map("status_code")
+  retryCount   Int      @default(0) @map("retry_count")
+  responseBody String?  @map("response_body") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_logs")
+}
+
+model CurrencyRate {
+  id        String   @id @default(cuid())
+  currency  String   @unique
+  rate      Float    // Rate against USDT (1 USDT = rate of this currency)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("currency_rates")
+}
